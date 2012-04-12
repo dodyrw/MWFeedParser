@@ -210,12 +210,55 @@
 		// Check whether it's UTF-8
 		if (![[textEncodingName lowercaseString] isEqualToString:@"utf-8"]) {
 			
+            /**** ori *****
+             
 			// Not UTF-8 so convert
 			MWLog(@"MWFeedParser: XML document was not UTF-8 so we're converting it");
 			NSString *string = nil;
 			
 			// Attempt to detect encoding from response header
 			NSStringEncoding nsEncoding = 0;
+            
+            ****/
+            
+            // FIX
+            
+            // Not UTF-8 so convert
+            MWLog(@"MWFeedParser: XML document was not UTF-8 so we're converting it");
+            NSString *string = nil;
+            
+            // If no text encoding indication was in the response header
+            // then try to get encoding from the XML declaration
+            if (textEncodingName == nil) {
+                NSData* xmlEncodingData = [NSData dataWithBytesNoCopy:(void *)[data bytes]
+                                                               length:100
+                                                         freeWhenDone:NO];
+                NSString* xmlEncodingString = [[NSString alloc] initWithData:xmlEncodingData encoding:NSUTF8StringEncoding];
+                if (!xmlEncodingString) xmlEncodingString = [[NSString alloc] initWithData:xmlEncodingData encoding:NSISOLatin1StringEncoding];
+                if (!xmlEncodingString) xmlEncodingString = [[NSString alloc] initWithData:xmlEncodingData encoding:NSMacOSRomanStringEncoding];
+                
+                if ([xmlEncodingString hasPrefix:@"<?xml"]) {
+                    NSRange a = [xmlEncodingString rangeOfString:@"?>"];
+                    if (a.location != NSNotFound) {
+                        NSString *xmlDec = [xmlEncodingString substringToIndex:a.location];
+                        NSRange b = [xmlDec rangeOfString:@"encoding=\""];
+                        if (b.location != NSNotFound) {
+                            NSUInteger s = b.location+b.length;
+                            NSRange c = [xmlDec rangeOfString:@"\"" options:0 range:NSMakeRange(s, [xmlDec length] - s)];
+                            if (c.location != NSNotFound) {
+                                textEncodingName = [xmlEncodingString substringWithRange:NSMakeRange(b.location+b.length,c.location-b.location-b.length)];
+                            }
+                        }
+                    }
+                }
+                [xmlEncodingString release];
+            }
+            
+            // Attempt to detect encoding from response header or XML declaration
+            NSStringEncoding nsEncoding = 0;
+            
+            // END FIX
+            
 			if (textEncodingName) {
 				CFStringEncoding cfEncoding = CFStringConvertIANACharSetNameToEncoding((CFStringRef)textEncodingName);
 				if (cfEncoding != kCFStringEncodingInvalidId) {
@@ -622,6 +665,11 @@
 					else if ([currentPath isEqualToString:@"/rss/channel/item/pubDate"]) { if (processedText.length > 0) item.date = [NSDate dateFromInternetDateTimeString:processedText formatHint:DateFormatHintRFC822]; processed = YES; }
 					else if ([currentPath isEqualToString:@"/rss/channel/item/enclosure"]) { [self createEnclosureFromAttributes:currentElementAttributes andAddToItem:item]; processed = YES; }
 					else if ([currentPath isEqualToString:@"/rss/channel/item/dc:date"]) { if (processedText.length > 0) item.date = [NSDate dateFromInternetDateTimeString:processedText formatHint:DateFormatHintRFC3339]; processed = YES; }
+                    
+                    // add image
+					else if ([currentPath isEqualToString:@"/rss/channel/item/image"]) { if (processedText.length > 0) item.image = processedText; processed = YES; }
+                            
+
 				}
 				
 				// Info
